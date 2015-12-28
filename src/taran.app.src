@@ -1,0 +1,17 @@
+{application, taran,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  sync,
+                  etarantool,
+                  mongodb,
+                  msgpack,
+                  ranch
+                 ]},
+  {mod, { taran_app, []}},
+  {env, []}
+ ]}.
