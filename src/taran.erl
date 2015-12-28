@@ -10,12 +10,12 @@
 -export([
     select/1, select/2, select/3,
     insert/2, insert/3,
-    replace/3,
-    update/4,
-    delete/3,
-    call/3,
-    eval/3,
-    upsert/4
+    replace/2, replace/3,
+    update/3, update/4,
+    delete/2, delete/3,
+    call/1, call/2, call/3,
+    eval/1, eval/2, eval/3,
+    upsert/3, upsert/4
   ]).
 
 
@@ -167,7 +167,8 @@ insert(Conn, Tuple, Args) ->
 
   send(Conn, ?REQUEST_CODE_INSERT, Body).
 
-
+replace(Conn, Tuple) ->
+  replace(Conn, Tuple, []).
 replace(Conn, Tuple, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),
@@ -182,6 +183,8 @@ replace(Conn, Tuple, Args) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UPDATE
+update(Conn, Key, Op) ->
+  update(Conn, Key, Op, []).
 update(Conn, Key, Op, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
@@ -199,6 +202,8 @@ update(Conn, Key, Op, Args) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% DELETE
+delete(Conn, Key) ->
+  delete(Conn, Key, []).
 delete(Conn, Key, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
@@ -214,6 +219,10 @@ delete(Conn, Key, Args) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CALL
+call(Conn) ->
+  call(Conn, <<"tonumber">>, [<<"5">>]).
+call(Conn, FuncName) ->
+  call(Conn, FuncName, []).
 call(Conn, FuncName, FuncArgs) ->
   
   <<Body/binary>> = msgpack:pack(#{
@@ -226,6 +235,10 @@ call(Conn, FuncName, FuncArgs) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% EVAL
+eval(Conn) ->
+  eval(Conn, <<"return 'Hello world!'">>).
+eval(Conn, Expr) ->
+  eval(Conn, Expr, []).
 eval(Conn, Expr, ArgsList) ->
   Body = msgpack:pack(#{
     ?EXPRESSION => Expr,
@@ -237,6 +250,8 @@ eval(Conn, Expr, ArgsList) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UPSERT
+upsert(Conn, Tuple, Ops) ->
+  upsert(Conn, Tuple, Ops, []).
 upsert(Conn, Tuple, Ops, Args) -> 
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),

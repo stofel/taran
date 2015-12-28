@@ -242,17 +242,41 @@ parse_(BufPacket, AnswerAcc) when BufPacket /= <<>> ->
   end;
 parse_(<<>>, AnswerAcc) -> {<<>>, AnswerAcc}.
 
- 
-resp_(State = #{refs := Refs}, [[Header, AnswerBody]|Answers]) ->
+
+% 
+resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, #{16#30 := AnswerBody}]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
     {value, {Ref, Seq, Pid}, NewRefs} ->
-      Pid ! {taran_socket_answer, Ref, AnswerBody},
+      Pid ! {taran_socket_answer, Ref, {ok, AnswerBody}},
       resp_(State#{refs := NewRefs}, Answers);
     false ->
       %% dalaed answer? drop it, do_nothing
       resp_(State, Answers)
   end;
+%
+resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, _]|Answers]) ->
+  #{?IPROTO_SYNC  := Seq} = Header,
+  case lists:keytake(Seq, 2, Refs) of
+    {value, {Ref, Seq, Pid}, NewRefs} ->
+      Pid ! {taran_socket_answer, Ref, {ok, []}},
+      resp_(State#{refs := NewRefs}, Answers);
+    false ->
+      %% dalaed answer? drop it, do_nothing
+      resp_(State, Answers)
+  end;
+%
+resp_(State = #{refs := Refs}, [[Header = #{0 := ErrCode}, #{16#31 := AnswerBody}]|Answers]) ->
+  #{?IPROTO_SYNC  := Seq} = Header,
+  case lists:keytake(Seq, 2, Refs) of
+    {value, {Ref, Seq, Pid}, NewRefs} ->
+       Pid ! {taran_socket_answer, Ref, {err, {ErrCode, AnswerBody}} },
+       resp_(State#{refs := NewRefs}, Answers);
+    false ->
+      %% dalaed answer? drop it, do_nothing
+      resp_(State, Answers)
+  end;
+%
 resp_(State, []) -> State.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
