@@ -16,6 +16,8 @@ and add taran to your_project.app.src file
 
 USAGE
 
+Default host localhost, default port 3301
+
 ```erlang
 Db = taran:connect(_ConnName = test).
 {ok,test}
@@ -31,6 +33,9 @@ taran:eval(test, <<"return 'hello'">>).
 
 taran:connect_close(test).
 ok
+
+taran:eval(test, <<"return {['hello']={'hello'}}">>).
+{ok,#{<<"hello">> => [<<"hello">>]}}
 ```
 
 See taran.erl for more commands, options and defaults.
