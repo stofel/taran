@@ -34,6 +34,7 @@ handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
+%% Args = connect Options
 init_(Args) ->
   Address = proplists:get_value(host, Args, "localhost"),
   Port    = proplists:get_value(port, Args, 3301),
@@ -164,7 +165,7 @@ req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) -
   ok = gen_tcp:send(Socket, Packet),
   erlang:send_after(Timeout, self(), {req_timeout, Ref}),
 
-  {noreply, State#{refs := [{Ref, Seq+1, Pid}|Refs]}}.
+  {noreply, State#{refs := [{Ref, Seq+1, Pid, Code}|Refs]}}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -247,19 +248,30 @@ parse_(<<>>, AnswerAcc) -> {<<>>, AnswerAcc}.
 resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, #{16#30 := AnswerBody}]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid}, NewRefs} ->
+    {value, {Ref, Seq, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
       Pid ! {taran_socket_answer, Ref, {ok, AnswerBody}},
       resp_(State#{refs := NewRefs}, Answers);
+    {value, {Ref, Seq, Pid, _ElseCode}, NewRefs} ->
+      Answer =
+        case AnswerBody of
+          [Value]   -> Value;
+          [[Value]] -> Value;
+          Value     -> Value
+        end,
+      Pid ! {taran_socket_answer, Ref, {ok, Answer}},
+      resp_(State#{refs := NewRefs}, Answers);
     false ->
-      %% dalaed answer? drop it, do_nothing
       resp_(State, Answers)
   end;
 %
 resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, _]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid}, NewRefs} ->
+    {value, {Ref, Seq, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
       Pid ! {taran_socket_answer, Ref, {ok, []}},
+      resp_(State#{refs := NewRefs}, Answers);
+    {value, {Ref, Seq, Pid, _ElseCode}, NewRefs} ->
+      Pid ! {taran_socket_answer, Ref, ok},
       resp_(State#{refs := NewRefs}, Answers);
     false ->
       %% dalaed answer? drop it, do_nothing
@@ -269,7 +281,7 @@ resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, _]|Answers]) ->
 resp_(State = #{refs := Refs}, [[Header = #{0 := ErrCode}, #{16#31 := AnswerBody}]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid}, NewRefs} ->
+    {value, {Ref, Seq, Pid, _Code}, NewRefs} ->
        Pid ! {taran_socket_answer, Ref, {err, {ErrCode, AnswerBody}} },
        resp_(State#{refs := NewRefs}, Answers);
     false ->

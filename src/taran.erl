@@ -19,7 +19,6 @@
   ]).
 
 
-
 %% http://tarantool.org/doc/dev_guide/box-protocol.html#iproto-protocol
 -define(IPROTO_CODE,          16#00).
 -define(IPROTO_SYNC,          16#01).
@@ -49,6 +48,17 @@
 
 
 
+%-type tree() :: {'node', Left::tree(), Right::tree(), Key::any(), Value::any()}.
+-type tarantool_db_conn() :: {ok, atom()|list()} |
+                             atom() |
+                             list().
+
+-type tarantool_return() :: ok |
+                            {ok, term()} |
+                            {err, {integer(), binary()}} |
+                            {err, term()}.
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Connect
@@ -58,6 +68,9 @@ connect() ->
 connect(Name) -> 
   connect(Name, []).
 
+% See taran_socket_holder:init_ for connect Options
+-spec connect(Name::atom()|list(), Options::list()) -> 
+    {ok, DBConn::term()} | {err, Reason::term()}.
 connect(Name, Options) when is_atom(Name); Name == "unnamed" -> 
 
   SupConnName =
@@ -75,22 +88,28 @@ connect(Name, Options) when is_atom(Name); Name == "unnamed" ->
   end.
   
 
+-spec connect_list() -> SupChailds::list().
 connect_list() -> 
   supervisor:which_children(taran_sup).
 
 
+-spec connect_close(ConnId::atom()|list()|{ok, ConnId::atom()|list()}) -> 
+    TerminateChildReturn::term().
+connect_close({ok, ConnId}) ->
+  connect_close(ConnId);
 connect_close(ConnId) -> 
   supervisor:terminate_child(taran_sup, ConnId).
-  %supervisor:delete_child(taran_sup, ConnId).
 
 
+-spec connect_close_all() -> RetList::list().
 connect_close_all() ->
-  [connect_close(ConnId)||{ConnId, _,_,_}<- connect_list()].
+  [connect_close(ConnId) || {ConnId, _,_,_} <- connect_list()].
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Get socket handler worker pid 
+%% @local 
 get_conn_pid({ok, Conn}) ->
   get_conn_pid(Conn);
 get_conn_pid(Conn) when is_list(Conn); is_atom(Conn) ->
@@ -112,6 +131,7 @@ get_conn_pid(Conn) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Send to request
+%% @local
 send(Conn, Code, Body) ->
   Req = #{
     code => Code,
@@ -134,6 +154,9 @@ select(Conn) ->
   select(Conn, []).
 select(Conn, Key) ->
   select(Conn, Key, []).
+
+-spec select(Conn::tarantool_db_conn(), Key::list(), Args::list()) -> 
+    TarantoolReturn::tarantool_return().
 select(Conn, Key, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
@@ -157,18 +180,24 @@ select(Conn, Key, Args) ->
 %% INSERT/REPLACE
 insert(Conn, Tuple) ->
   insert(Conn, Tuple, []).
-insert(Conn, Tuple, Args) ->
+
+-spec insert(Conn::tarantool_db_conn(), Tuple::list(), Args::list()) -> 
+    TarantoolReturn::tarantool_return().
+insert(Conn, Tuple, Args)  when is_list(Tuple) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
-  ListTuple = tuple_to_list(Tuple),
   
   Body = msgpack:pack(#{
     ?SPACE_ID => SpaceId,
-    ?TUPLE    => ListTuple}),
+    ?TUPLE    => Tuple}),
 
   send(Conn, ?REQUEST_CODE_INSERT, Body).
 
+%
 replace(Conn, Tuple) ->
   replace(Conn, Tuple, []).
+
+-spec replace(Conn::tarantool_db_conn(), Tuple::list(), Args::list()) ->
+    TarantoolReturn::tarantool_return().
 replace(Conn, Tuple, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),
@@ -185,6 +214,9 @@ replace(Conn, Tuple, Args) ->
 %% UPDATE
 update(Conn, Key, Op) ->
   update(Conn, Key, Op, []).
+
+-spec update(Conn::tarantool_db_conn(), Key::list(), Op::list(), Args::list()) ->
+    TarantoolReturn::tarantool_return().
 update(Conn, Key, Op, Args) ->
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
@@ -204,8 +236,11 @@ update(Conn, Key, Op, Args) ->
 %% DELETE
 delete(Conn, Key) ->
   delete(Conn, Key, []).
+
+-spec delete(Conn::tarantool_db_conn(), Key::list(), Args::list()) ->
+    TarantoolReturn::tarantool_return().
 delete(Conn, Key, Args) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
+  SpaceId   = proplists:get_value(space_id, Args, 16#00),         %% 0 by default
   Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
 
   Body = msgpack:pack(#{
@@ -223,6 +258,10 @@ call(Conn) ->
   call(Conn, <<"tonumber">>, [<<"5">>]).
 call(Conn, FuncName) ->
   call(Conn, FuncName, []).
+
+
+-spec call(Conn::tarantool_db_conn(), FuncName::binary(), FuncArgs::list()) ->
+    TarantoolReturn::tarantool_return().
 call(Conn, FuncName, FuncArgs) ->
   
   <<Body/binary>> = msgpack:pack(#{
@@ -239,6 +278,9 @@ eval(Conn) ->
   eval(Conn, <<"return 'Hello world!'">>).
 eval(Conn, Expr) ->
   eval(Conn, Expr, []).
+
+-spec eval(Conn::tarantool_db_conn(), Expr::binary(), ArgsList::list()) ->
+    TarantoolReturn::tarantool_return().
 eval(Conn, Expr, ArgsList) ->
   Body = msgpack:pack(#{
     ?EXPRESSION => Expr,
@@ -252,6 +294,9 @@ eval(Conn, Expr, ArgsList) ->
 %% UPSERT
 upsert(Conn, Tuple, Ops) ->
   upsert(Conn, Tuple, Ops, []).
+
+-spec upsert(Conn::tarantool_db_conn(), Tuple::list(), Ops::list(), Args::list()) ->
+    TarantoolReturn::tarantool_return().
 upsert(Conn, Tuple, Ops, Args) -> 
   SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),
