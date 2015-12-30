@@ -34,11 +34,11 @@ taran:select(Db, [1]).
 taran:eval(Db, <<"return 'hello'">>).
 {ok,<<"hello">>}
 
-taran:connect_close(Db).
-ok
-
 taran:eval(Db, <<"return {['hello']={'hello'}}">>).
 {ok,#{<<"hello">> => [<<"hello">>]}}
+
+taran:connect_close(Db).
+ok
 ```
 
 See taran.erl for more commands, options and defaults.
