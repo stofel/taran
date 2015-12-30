@@ -1,5 +1,8 @@
 # taran
 
+
+Erlang tarantool connector
+
 INSTALL
 
 add it to your rebar config
