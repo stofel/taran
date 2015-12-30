@@ -22,22 +22,22 @@ USAGE
 Default host localhost, default port 3301
 
 ```erlang
-Db = taran:connect(_ConnName = test).
+{ok, Db} = taran:connect(_ConnName = test).
 {ok,test}
 
-taran:insert(test, [1, <<"test_row">>]).
+taran:insert(Db, [1, <<"test_row">>]).
 {ok, [1, <<"test_row">>]}
 
-taran:select(test, [1]).
+taran:select(Db, [1]).
 {ok, [[1, <<"test_row">>]]}
 
-taran:eval(test, <<"return 'hello'">>).
+taran:eval(Db, <<"return 'hello'">>).
 {ok,<<"hello">>}
 
-taran:connect_close(test).
+taran:connect_close(Db).
 ok
 
-taran:eval(test, <<"return {['hello']={'hello'}}">>).
+taran:eval(Db, <<"return {['hello']={'hello'}}">>).
 {ok,#{<<"hello">> => [<<"hello">>]}}
 ```
 
