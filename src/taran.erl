@@ -46,7 +46,18 @@
 -define(EXPRESSION,           16#27).
 -define(OPS,                  16#28).
 
-
+%
+%ITERATOR_EQ = 0
+%ITERATOR_REQ = 1
+%ITERATOR_ALL = 2
+%ITERATOR_LT = 3
+%ITERATOR_LE = 4
+%ITERATOR_GE = 5
+%ITERATOR_GT = 6
+%ITERATOR_BITSET_ALL_SET = 7
+%ITERATOR_BITSET_ANY_SET = 8
+%ITERATOR_BITSET_ALL_NOT_SET = 9
+%
 
 %-type tree() :: {'node', Left::tree(), Right::tree(), Key::any(), Value::any()}.
 -type tarantool_db_conn() :: {ok, atom()|list()} |
@@ -138,7 +149,7 @@ send(Conn, Code, Body) ->
     body => Body},
 
   case get_conn_pid(Conn) of
-    {ok, Pid} -> taran_socket_holder:req(Pid, Req, 1*1000);
+    {ok, Pid} -> taran_socket_holder:req(Pid, Req, 3*1000);
     Else -> Else
   end.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

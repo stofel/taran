@@ -41,6 +41,6 @@ init(Args) ->
                 type    => worker,
                 modules => [taran_socket_holder]} || N <- lists:seq(1, ConnsNum)],
     %io:format("~p~n", [Childs]),
-    {ok, { {one_for_one, 3, 10}, Childs} }.
+    {ok, { {one_for_one, 3000, 5}, Childs} }.
 
 

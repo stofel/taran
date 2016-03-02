@@ -34,39 +34,64 @@ handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
+-define(S, #{
+  s     => undefined, 
+  stime => erlang:system_time(seconds),
+  args  => undefined,
+  refs  => [], 
+  buf   => <<>>, 
+  seq   => 1}).
+
+
+-define(SOCKET_TTL,     600).    %% Secs
+-define(SOCKET_MAX_REQ, 600000). %% Secs
+
+
+
 %% Args = connect Options
 init_(Args) ->
   Address = proplists:get_value(host, Args, "localhost"),
   Port    = proplists:get_value(port, Args, 3301),
   TcpOpts = [
-        {exit_on_close, true},
-        {mode, binary},
-        {packet, raw},
-%        {delay_send, Mode =/= blocked},
-        {keepalive, true}],
-  {ok, Socket} = gen_tcp:connect(Address, Port, TcpOpts),
-  Greeting = receive StartResponse -> StartResponse after 1000 -> timeout end,
+             {mode, binary}
+             ,{packet, raw}
+             %,{active, false}
+             ,{exit_on_close, true}
+             %,{backlog, 32}
+             %,{delay_send, Mode =/= blocked},
+             ,{keepalive, true}
+            ],
+  Login    = proplists:get_value(user, Args, <<"none">>),
+  Password = proplists:get_value(pass, Args, <<"none">>),
+  ConnArgs = {Address, Port, TcpOpts, Login, Password},
+  case connect(ConnArgs) of
+    {ok, Socket} -> {ok, ?S#{s => Socket, args := ConnArgs}};
+    Else -> Else
+  end. 
 
-  Res =
-    case Greeting of
-      timeout -> {err, {timeout, server_connect_timeout}};
-      {tcp, Socket, GreetingData} -> 
-        %%
-        case {proplists:get_value(user, Args, <<"none">>),
-              proplists:get_value(pass, Args, <<"none">>)} of
-          {<<"none">>, <<"none">>} ->
-            {ok, #{s => Socket, refs => [], buf => <<>>, seq => 1}};
-          {Login, Password} ->
-            case auth(Socket, Login, Password, GreetingData) of
-              ok -> {ok, #{s => Socket, refs => [], buf => <<>>, seq => 1}};
-              Else -> Else
-            end
-        end;
-      _ -> {err, {server_connect_error, server_connect_error}}
-    end,
-  %io:format("~p~n", [{Res, Greeting}]),
-  Res.
  
+
+connect({Address, Port, TcpOpts, Login, Password}) ->
+  {ok, Socket} = gen_tcp:connect(Address, Port, TcpOpts),
+  receive 
+    {tcp, Socket, GreetingData} ->
+      case Login == <<"none">> andalso Password == <<"none">> of 
+        true -> 
+          {ok, Socket};
+        false ->
+          case auth(Socket, Login, Password, GreetingData) of
+            ok -> {ok, Socket};
+            Else -> Else
+          end
+      end
+  after
+    1000 -> throw(socket_timeout)
+  end.
+
+
+
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,19 +178,20 @@ req(Pid, Req, Timeout) ->
   end.
 req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) ->
   #{code := Code, body := Body} = Req,
+  NewSeq = Seq + 1,
   HeaderMap = #{
     ?IPROTO_CODE    => Code, %% Select
-    ?IPROTO_SYNC    => Seq + 1},
+    ?IPROTO_SYNC    => NewSeq},
   Header = msgpack:pack(HeaderMap),
 
   ReqLen = msgpack:pack(erlang:size(Header) + erlang:size(Body)),
 
   Packet = <<ReqLen/binary, Header/binary, Body/binary>>,
 
-  ok = gen_tcp:send(Socket, Packet),
+  Res = gen_tcp:send(Socket, Packet),
   erlang:send_after(Timeout, self(), {req_timeout, Ref}),
 
-  {noreply, State#{refs := [{Ref, Seq+1, Pid, Code}|Refs]}}.
+  {noreply, State#{seq := NewSeq, refs := [{Ref, NewSeq, Pid, Code}|Refs]}}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -184,7 +210,9 @@ req_timeout_(State = #{refs := Refs}, Ref) ->
   {noreply, State#{refs := lists:keydelete(Ref, 1, Refs)}}.
   
 
-timeout_(State) -> {noreply, State}.
+timeout_(State) -> 
+  %{noreply, State}.
+  throw({tcp_timeout, self()}).
 info_unknown(State) ->
   % print msg
   {noreply, State}.
@@ -199,7 +227,7 @@ close_(_State, _Socket, Reason) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% RECEIVE & UNPACK & ANSWER
-recv_(State = #{buf := Buf, s := Socket}, {tcp, Socket, Packet}) ->
+recv_(State = #{buf := Buf}, {tcp, Socket, Packet}) ->
   {NewBuf, Answers} = parse_(<<Buf/binary, Packet/binary>>),
   NewState = resp_(State, Answers),
   {noreply, NewState#{buf := NewBuf}}.
@@ -223,23 +251,34 @@ parse_(BufPacket) ->
   
 
 parse_(BufPacket, AnswerAcc) when BufPacket /= <<>> -> 
-  case msgpack:unpack_stream(BufPacket) of
-    {Len, RestBin} when is_integer(Len) ->
-      case RestBin of
-        <<RestBin:Len/binary>> -> parse_(<<>>, [RestBin|AnswerAcc]);
-        <<RestBin:Len/binary, NewBuf>> -> parse_(NewBuf, [RestBin|AnswerAcc]);
-        IncompleteRest ->
-          case msgpack:unpack_stream(IncompleteRest) of
-            {#{?IPROTO_CODE := Code, ?IPROTO_SYNC := Sync}, _Rest} when 
-                is_integer(Code), is_integer(Sync) ->
-                  %% So yes, it is like to begin of next packet
-                  {BufPacket, AnswerAcc};
-            _ ->
-                  %% No it is like ugly unknown crap
-                  throw(crap_received)
-          end
-      end;
-    {error, Reason} -> throw({crap_received2, Reason})
+  case erlang:size(BufPacket) < 5 of
+    true -> 
+      {BufPacket, AnswerAcc};
+    false ->
+      case msgpack:unpack_stream(BufPacket) of
+        {Len, RestBin} when is_integer(Len) ->
+          case RestBin of
+            <<Bin:Len/binary>> -> 
+              %% Complite and Full
+              parse_(<<>>, [Bin|AnswerAcc]);
+            <<Bin:Len/binary, NewBuf/binary>> -> 
+              %% Complite and Part
+              parse_(NewBuf, [Bin|AnswerAcc]);
+            IncompleteRest ->
+              {BufPacket, AnswerAcc}
+              %case msgpack:unpack_stream(IncompleteRest) of
+              %  {#{?IPROTO_CODE := Code, ?IPROTO_SYNC := Sync}, _Rest} when 
+              %      is_integer(Code), is_integer(Sync) ->
+              %        %% So yes, it is like to begin of next packet
+              %        {BufPacket, AnswerAcc};
+              %  _ ->
+              %        %% No it is like ugly unknown crap
+              %        throw({crap_received, IncompleteRest})
+              %end
+          end;
+        {error, Reason} -> 
+          throw({crap_received, BufPacket})
+      end
   end;
 parse_(<<>>, AnswerAcc) -> {<<>>, AnswerAcc}.
 
@@ -289,7 +328,8 @@ resp_(State = #{refs := Refs}, [[Header = #{0 := ErrCode}, #{16#31 := AnswerBody
       resp_(State, Answers)
   end;
 %
-resp_(State, []) -> State.
+resp_(State, []) -> 
+  State.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
