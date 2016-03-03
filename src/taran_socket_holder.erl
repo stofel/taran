@@ -178,7 +178,7 @@ req(Pid, Req, Timeout) ->
   end.
 req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) ->
   #{code := Code, body := Body} = Req,
-  NewSeq = Seq + 1,
+  NewSeq = case Seq > 100000000 of true -> 1; false -> Seq + 1 end,
   HeaderMap = #{
     ?IPROTO_CODE    => Code, %% Select
     ?IPROTO_SYNC    => NewSeq},
