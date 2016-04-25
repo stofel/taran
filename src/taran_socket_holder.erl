@@ -122,7 +122,7 @@ auth(Socket, Login, Password, Greeting) when is_binary(Login), is_binary(Passwor
         UnpackFun =
           fun
             (Bin, AnswerAcc, F) when Bin /= <<>> ->
-              case msgpack:unpack_stream(Bin) of
+              case msgpack:unpack_stream(Bin, [{unpack_str, as_binary}]) of
                 {Term,  RestBin} when Term /= error -> F(RestBin, [Term|AnswerAcc], F);
                 {error, Reason} -> throw(Reason)
               end;
@@ -240,7 +240,7 @@ parse_(BufPacket) ->
   UnpackFun = 
     fun
       (Bin, AnswerAcc, F) when Bin /= <<>> ->
-        case msgpack:unpack_stream(Bin) of
+        case msgpack:unpack_stream(Bin, [{unpack_str, as_binary}]) of
           {Term,  RestBin} when Term /= error -> F(RestBin, [Term|AnswerAcc], F);
           {error, Reason} -> throw(Reason)
         end;
@@ -255,7 +255,7 @@ parse_(BufPacket, AnswerAcc) when BufPacket /= <<>> ->
     true -> 
       {BufPacket, AnswerAcc};
     false ->
-      case msgpack:unpack_stream(BufPacket) of
+      case msgpack:unpack_stream(BufPacket, [{unpack_str, as_binary}]) of
         {Len, RestBin} when is_integer(Len) ->
           case RestBin of
             <<Bin:Len/binary>> -> 

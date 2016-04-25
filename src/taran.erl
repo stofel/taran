@@ -181,7 +181,7 @@ select(Conn, Key, Args) ->
     ?LIMIT    => Limit,
     ?OFFSET   => OffSet,
     ?ITERATOR => Iterator,
-    ?KEY      => Key}),
+    ?KEY      => Key}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_SELECT, Body).  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -199,7 +199,7 @@ insert(Conn, Tuple, Args)  when is_list(Tuple) ->
   
   Body = msgpack:pack(#{
     ?SPACE_ID => SpaceId,
-    ?TUPLE    => Tuple}),
+    ?TUPLE    => Tuple}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_INSERT, Body).
 
@@ -215,7 +215,7 @@ replace(Conn, Tuple, Args) ->
 
   Body = msgpack:pack(#{
     ?SPACE_ID => SpaceId,
-    ?TUPLE    => ListTuple}),
+    ?TUPLE    => ListTuple}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_REPLACE, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -237,7 +237,7 @@ update(Conn, Key, Op, Args) ->
     ?SPACE_ID => SpaceId,
     ?INDEX_ID => Index,
     ?KEY      => Key,
-    ?TUPLE    => Op}),
+    ?TUPLE    => Op}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_UPDATE, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -257,7 +257,7 @@ delete(Conn, Key, Args) ->
   Body = msgpack:pack(#{
     ?SPACE_ID => SpaceId,
     ?INDEX_ID => Index,
-    ?KEY      => Key}),
+    ?KEY      => Key}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_DELETE, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -277,7 +277,7 @@ call(Conn, FuncName, FuncArgs) ->
   
   <<Body/binary>> = msgpack:pack(#{
     ?FUNC_NAME => FuncName,
-    ?TUPLE     => FuncArgs}),
+    ?TUPLE     => FuncArgs}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_CALL, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -295,7 +295,7 @@ eval(Conn, Expr) ->
 eval(Conn, Expr, ArgsList) ->
   Body = msgpack:pack(#{
     ?EXPRESSION => Expr,
-    ?TUPLE      => ArgsList}),
+    ?TUPLE      => ArgsList}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_EVAL, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -315,7 +315,7 @@ upsert(Conn, Tuple, Ops, Args) ->
   Body = msgpack:pack(#{
     ?SPACE_ID => SpaceId,
     ?TUPLE    => ListTuple,
-    ?OPS      => Ops}),
+    ?OPS      => Ops}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_UPSERT, Body).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
