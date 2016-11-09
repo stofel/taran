@@ -328,15 +328,15 @@ upsert(Conn, Tuple, Ops, Args) ->
 random_str(Length) ->
   AllowedChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789",
   {A,B,C} = os:timestamp(),
-  random:seed(A,B,C),
+  rand:seed(A,B,C),
   lists:foldl(
     fun(_, Acc) ->
-      [lists:nth(random:uniform(length(AllowedChars)), AllowedChars)] ++ Acc
+      [lists:nth(rand:uniform(length(AllowedChars)), AllowedChars)] ++ Acc
     end, [], lists:seq(1, Length)).
 
 random_int(1) -> 1;
 random_int(N) ->
   {A,B,C} = erlang:timestamp(),
-  random:seed(A,B,C),
-  random:uniform(N).
+  rand:seed(A,B,C),
+  rand:uniform(N).
 
