@@ -1,7 +1,7 @@
 # taran
 
 
-Erlang tarantool connector
+Erlang tarantool 1.6.8 connector
 
 INSTALL
 
