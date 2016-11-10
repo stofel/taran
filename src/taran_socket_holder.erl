@@ -49,9 +49,7 @@ handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
 
 
 %% Args = connect Options
-init_(Args) ->
-  Address = proplists:get_value(host, Args, "localhost"),
-  Port    = proplists:get_value(port, Args, 3301),
+init_(Args) -> 
   TcpOpts = [
              {mode, binary}
              ,{packet, raw}
@@ -61,9 +59,7 @@ init_(Args) ->
              %,{delay_send, Mode =/= blocked},
              ,{keepalive, true}
             ],
-  Login    = proplists:get_value(user, Args, <<"none">>),
-  Password = proplists:get_value(pass, Args, <<"none">>),
-  ConnArgs = {Address, Port, TcpOpts, Login, Password},
+  ConnArgs = Args#{tcp_opts => TcpOpts},
   case connect(ConnArgs) of
     {ok, Socket} -> {ok, ?S#{s => Socket, args := ConnArgs}};
     Else -> Else
@@ -71,15 +67,15 @@ init_(Args) ->
 
  
 
-connect({Address, Port, TcpOpts, Login, Password}) ->
-  {ok, Socket} = gen_tcp:connect(Address, Port, TcpOpts),
+connect(_Args = #{host := Host, port := Port, user := User, pass := Pass, tcp_opts := TcpOpts}) ->
+  {ok, Socket} = gen_tcp:connect(Host, Port, TcpOpts),
   receive 
     {tcp, Socket, GreetingData} ->
-      case Login == <<"none">> andalso Password == <<"none">> of 
+      case User == <<"none">> andalso Pass == <<"none">> of 
         true -> 
           {ok, Socket};
         false ->
-          case auth(Socket, Login, Password, GreetingData) of
+          case auth(Socket, User, Pass, GreetingData) of
             ok -> {ok, Socket};
             Else -> Else
           end
@@ -188,7 +184,7 @@ req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) -
 
   Packet = <<ReqLen/binary, Header/binary, Body/binary>>,
 
-  Res = gen_tcp:send(Socket, Packet),
+  gen_tcp:send(Socket, Packet),
   erlang:send_after(Timeout, self(), {req_timeout, Ref}),
 
   {noreply, State#{seq := NewSeq, refs := [{Ref, NewSeq, Pid, Code}|Refs]}}.
@@ -210,7 +206,7 @@ req_timeout_(State = #{refs := Refs}, Ref) ->
   {noreply, State#{refs := lists:keydelete(Ref, 1, Refs)}}.
   
 
-timeout_(State) -> 
+timeout_(_State) -> 
   %{noreply, State}.
   throw({tcp_timeout, self()}).
 info_unknown(State) ->
@@ -227,7 +223,7 @@ close_(_State, _Socket, Reason) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% RECEIVE & UNPACK & ANSWER
-recv_(State = #{buf := Buf}, {tcp, Socket, Packet}) ->
+recv_(State = #{buf := Buf, s := CurSocket}, {tcp, Socket, Packet}) when CurSocket == Socket ->
   {NewBuf, Answers} = parse_(<<Buf/binary, Packet/binary>>),
   NewState = resp_(State, Answers),
   {noreply, NewState#{buf := NewBuf}}.
@@ -264,19 +260,10 @@ parse_(BufPacket, AnswerAcc) when BufPacket /= <<>> ->
             <<Bin:Len/binary, NewBuf/binary>> -> 
               %% Complite and Part
               parse_(NewBuf, [Bin|AnswerAcc]);
-            IncompleteRest ->
-              {BufPacket, AnswerAcc}
-              %case msgpack:unpack_stream(IncompleteRest) of
-              %  {#{?IPROTO_CODE := Code, ?IPROTO_SYNC := Sync}, _Rest} when 
-              %      is_integer(Code), is_integer(Sync) ->
-              %        %% So yes, it is like to begin of next packet
-              %        {BufPacket, AnswerAcc};
-              %  _ ->
-              %        %% No it is like ugly unknown crap
-              %        throw({crap_received, IncompleteRest})
-              %end
+            _IncompleteRest ->
+              {BufPacket, AnswerAcc} %% TODO is in possible?
           end;
-        {error, Reason} -> 
+        {error, _Reason} -> 
           throw({crap_received, BufPacket})
       end
   end;

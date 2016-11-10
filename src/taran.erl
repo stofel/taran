@@ -77,12 +77,23 @@ connect() ->
   connect("unnamed").
 
 connect(Name) -> 
-  connect(Name, []).
+  connect(Name, #{}).
 
 % See taran_socket_holder:init_ for connect Options
--spec connect(Name::atom()|list(), Options::list()) -> 
+-spec connect(Name::atom()|list(), Options::map()) -> 
     {ok, DBConn::term()} | {err, Reason::term()}.
 connect(Name, Options) when is_atom(Name); Name == "unnamed" -> 
+
+
+  %% TODO put it in to README.md
+  FullOptions = #{
+    host => maps:get(host, Options, "localhost"), %% TCP Host to connect
+    port => maps:get(port, Options, 3301),        %% TCP Port to connect
+    cnum => maps:get(cnum, Options, 3),           %% Number of sockets for this connect
+    user => maps:get(user, Options, <<"none">>),  %% Auth user
+    pass => maps:get(pass, Options, <<"none">>)   %% Auth pass
+  },
+
 
   SupConnName =
     case Name == "unnamed" of
@@ -90,7 +101,7 @@ connect(Name, Options) when is_atom(Name); Name == "unnamed" ->
       false -> Name
     end,
 
-  {M, F, A} = {taran_conns_sup, start_link, [Name, Options]},
+  {M, F, A} = {taran_conns_sup, start_link, [Name, FullOptions]},
   ChildSpec = {SupConnName, {M, F, A}, temporary, 5000, supervisor, [M]},
 
   case supervisor:start_child(taran_sup, ChildSpec) of
