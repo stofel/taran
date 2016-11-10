@@ -175,23 +175,18 @@ send(Conn, Code, Body) ->
 select(Conn) -> 
   select(Conn, []).
 select(Conn, Key) ->
-  select(Conn, Key, []).
+  select(Conn, Key, #{}).
 
--spec select(Conn::tarantool_db_conn(), Key::list(), Args::list()) -> 
+-spec select(Conn::tarantool_db_conn(), Key::list(), Args::map()) -> 
     TarantoolReturn::tarantool_return().
 select(Conn, Key, Args) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
-  Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
-  Limit     = proplists:get_value(limit,    Args, 16#FFFFFFFF), %% Very big by default
-  OffSet    = proplists:get_value(offset,   Args, 16#00),       %% No offset by default
-  Iterator  = proplists:get_value(iterator, Args, 16#00),       %% EQ by default
 
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
-    ?INDEX_ID => Index,
-    ?LIMIT    => Limit,
-    ?OFFSET   => OffSet,
-    ?ITERATOR => Iterator,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),       %% 0 by default
+    ?INDEX_ID => maps:get(index_id, Args, 16#00),       %% 0 (primary?) by default
+    ?LIMIT    => maps:get(limit,    Args, 16#FFFFFFFF), %% Very big by default
+    ?OFFSET   => maps:get(offset,   Args, 16#00),       %% No offset by default
+    ?ITERATOR => maps:get(iterator, Args, 16#00),       %% EQ by default
     ?KEY      => Key}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_SELECT, Body).  
@@ -201,31 +196,29 @@ select(Conn, Key, Args) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% INSERT/REPLACE
 insert(Conn, Tuple) ->
-  insert(Conn, Tuple, []).
+  insert(Conn, Tuple, #{}).
 
--spec insert(Conn::tarantool_db_conn(), Tuple::list(), Args::list()) -> 
+-spec insert(Conn::tarantool_db_conn(), Tuple::list(), Args::map()) -> 
     TarantoolReturn::tarantool_return().
 insert(Conn, Tuple, Args)  when is_list(Tuple) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),     %% 0 by default
     ?TUPLE    => Tuple}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_INSERT, Body).
 
 %
 replace(Conn, Tuple) ->
-  replace(Conn, Tuple, []).
+  replace(Conn, Tuple, #{}).
 
--spec replace(Conn::tarantool_db_conn(), Tuple::list(), Args::list()) ->
+-spec replace(Conn::tarantool_db_conn(), Tuple::tuple(), Args::map()) ->
     TarantoolReturn::tarantool_return().
 replace(Conn, Tuple, Args) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),
 
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),       %% 0 by default,
     ?TUPLE    => ListTuple}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_REPLACE, Body).
@@ -235,18 +228,16 @@ replace(Conn, Tuple, Args) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UPDATE
 update(Conn, Key, Op) ->
-  update(Conn, Key, Op, []).
+  update(Conn, Key, Op, #{}).
 
--spec update(Conn::tarantool_db_conn(), Key::list(), Op::list(), Args::list()) ->
+-spec update(Conn::tarantool_db_conn(), Key::list(), Op::list(), Args::map()) ->
     TarantoolReturn::tarantool_return().
 update(Conn, Key, Op, Args) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
-  Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
   % {$+, 2, 1}
   
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
-    ?INDEX_ID => Index,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),  %% 0 by default,
+    ?INDEX_ID => maps:get(index_id, Args, 16#00),  %% 0 (primary?) by default,
     ?KEY      => Key,
     ?TUPLE    => Op}, [{pack_str, from_binary}]),
 
@@ -257,17 +248,15 @@ update(Conn, Key, Op, Args) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% DELETE
 delete(Conn, Key) ->
-  delete(Conn, Key, []).
+  delete(Conn, Key, #{}).
 
--spec delete(Conn::tarantool_db_conn(), Key::list(), Args::list()) ->
+-spec delete(Conn::tarantool_db_conn(), Key::list(), Args::map()) ->
     TarantoolReturn::tarantool_return().
 delete(Conn, Key, Args) ->
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),         %% 0 by default
-  Index     = proplists:get_value(index_id, Args, 16#00),       %% 0 (primary?) by default
 
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
-    ?INDEX_ID => Index,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),  %% 0 by default
+    ?INDEX_ID => maps:get(index_id, Args, 16#00),  %% 0 (primary?) by default
     ?KEY      => Key}, [{pack_str, from_binary}]),
 
   send(Conn, ?REQUEST_CODE_DELETE, Body).
@@ -315,16 +304,15 @@ eval(Conn, Expr, ArgsList) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UPSERT
 upsert(Conn, Tuple, Ops) ->
-  upsert(Conn, Tuple, Ops, []).
+  upsert(Conn, Tuple, Ops, #{}).
 
--spec upsert(Conn::tarantool_db_conn(), Tuple::list(), Ops::list(), Args::list()) ->
+-spec upsert(Conn::tarantool_db_conn(), Tuple::list(), Ops::list(), Args::map()) ->
     TarantoolReturn::tarantool_return().
 upsert(Conn, Tuple, Ops, Args) -> 
-  SpaceId   = proplists:get_value(space_id, Args, 16#00),       %% 0 by default
   ListTuple = tuple_to_list(Tuple),
 
   Body = msgpack:pack(#{
-    ?SPACE_ID => SpaceId,
+    ?SPACE_ID => maps:get(space_id, Args, 16#00),  %% 0 by default,
     ?TUPLE    => ListTuple,
     ?OPS      => Ops}, [{pack_str, from_binary}]),
 
