@@ -19,8 +19,6 @@ and add taran to your_project.app.src file
 
 USAGE
 
-Default host localhost, default port 3301
-
 ```erlang
 {ok, Db} = taran:connect(_ConnName = test).
 {ok,test}
