@@ -45,7 +45,7 @@ taran:insert(Db, [1, <<"test_row">>], Args).
 
 taran:select(Db, [1]).
 {ok, [[1, <<"test_row">>]]}
-%%
+%% or
 Args = #{space_id => 0,           %% SpaceId 0 by default
          index_id => 0,           %% IndexId 0 by default
          limit    => 16#FFFFFFFF, %% Very big number by default
