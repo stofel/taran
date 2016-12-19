@@ -27,10 +27,10 @@ terminate(_Reason, _State) -> ok.
 
 %%casts
 handle_cast({run, _FunName, Fun, Args}, State) -> apply(Fun, [State|Args]);
-handle_cast(_Req, State) -> {noreply, State}.
+handle_cast(_Req, State) -> cast_unknown(State).
 %%calls
 handle_call({run, _FunName, Fun, Args}, From, State) -> apply(Fun, [State,From|Args]);
-handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
+handle_call(_Req, _From, State) -> call_unknown(State).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -38,7 +38,7 @@ handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
   s     => undefined, 
   stime => erlang:system_time(seconds),
   args  => undefined,
-  refs  => [], 
+  refs  => [],  %% ordset [{Until, NewSeq, Ref, Pid, Code}]
   buf   => <<>>, 
   seq   => 1}).
 
@@ -51,7 +51,7 @@ handle_call(_Req, _From, State) -> {reply, unknown_command, State}.
 %% Args = connect Options
 init_(Args) -> 
   TcpOpts = [
-             {mode, binary}
+              {mode, binary}
              ,{packet, raw}
              %,{active, false}
              ,{exit_on_close, true}
@@ -172,11 +172,12 @@ req(Pid, Req, Timeout) ->
   after
     Timeout+200 -> {err, {timeout, request_timeout}}
   end.
+%
 req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) ->
   #{code := Code, body := Body} = Req,
   NewSeq = case Seq > 100000000 of true -> 1; false -> Seq + 1 end,
   HeaderMap = #{
-    ?IPROTO_CODE    => Code, %% Select
+    ?IPROTO_CODE    => Code, %% Example Select
     ?IPROTO_SYNC    => NewSeq},
   Header = msgpack:pack(HeaderMap),
 
@@ -185,9 +186,13 @@ req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) -
   Packet = <<ReqLen/binary, Header/binary, Body/binary>>,
 
   gen_tcp:send(Socket, Packet),
-  erlang:send_after(Timeout, self(), {req_timeout, Ref}),
 
-  {noreply, State#{seq := NewSeq, refs := [{Ref, NewSeq, Pid, Code}|Refs]}}.
+  Now = erlang:system_time(millisecond),
+  Until = Now + Timeout,
+  NewRefs = [{LastUntil,_,_,_,_}|_] = ordsets:add_element({Until, NewSeq, Ref, Pid, Code}, Refs),
+  HolderTimeout = case LastUntil - Now of V when V >= 0 -> V; _ -> 0 end,
+
+  {noreply, State#{seq := NewSeq, refs := NewRefs}, HolderTimeout}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -197,21 +202,57 @@ req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) -
 info_(State, {tcp,         Socket, Response}) -> recv_(State,  {tcp, Socket, Response});
 info_(State, {tcp_closed,  Socket})           -> close_(State, Socket, socket_closed);
 info_(State, {tcp_error,   Socket, Reason})   -> close_(State, Socket, Reason);
-info_(State, {req_timeout, Ref})              -> req_timeout_(State, Ref);
 info_(State, timeout)                         -> timeout_(State);
 info_(State, _)                               -> info_unknown(State).
 
 
-req_timeout_(State = #{refs := Refs}, Ref) ->
-  {noreply, State#{refs := lists:keydelete(Ref, 1, Refs)}}.
-  
-
-timeout_(_State) -> 
-  %{noreply, State}.
-  throw({tcp_timeout, self()}).
-info_unknown(State) ->
-  % print msg
+timeout_(State) ->
+  timeout_(State, erlang:system_time(millisecond)).
+%
+timeout_(State = #{refs := [{LastUntil,_,_,_,_}|_]}, Now) when LastUntil > Now -> 
+  {noreply, State, LastUntil - Now};
+%
+timeout_(State = #{refs := [{LastUntil,_,_,_,_}|Refs]}, Now) when LastUntil =< Now -> 
+  timeout_(State#{refs := Refs}, Now);
+%
+timeout_(State = #{refs := []}, _Now) ->
   {noreply, State}.
+
+
+
+info_unknown(State = #{refs := Refs}) ->
+  % print msg
+  case Refs of
+    [{LastUntil,_,_,_,_}|_] -> 
+      Now = erlang:system_time(millisecond),
+      HolderTimeout = case LastUntil - Now of V when V >= 0 -> V; _ -> 0 end,
+      {noreply, State, HolderTimeout};
+    [] ->
+      {noreply, State}
+  end.
+
+cast_unknown(State = #{refs := Refs}) ->
+  % print msg
+  case Refs of
+    [{LastUntil,_,_,_,_}|_] ->
+      Now = erlang:system_time(millisecond),
+      HolderTimeout = case LastUntil - Now of V when V >= 0 -> V; _ -> 0 end,
+      {noreply, State, HolderTimeout};
+    [] ->
+      {noreply, State}
+  end.
+
+call_unknown(State = #{refs := Refs}) ->
+  % print msg
+  case Refs of
+    [{LastUntil,_,_,_,_}|_] ->
+      Now = erlang:system_time(millisecond),
+      HolderTimeout = case LastUntil - Now of V when V >= 0 -> V; _ -> 0 end,
+      {reply, {err, {call_error, unknown_msg}}, State, HolderTimeout};
+    [] ->
+      {reply, {err, {call_error, unknown_msg}}, State}
+  end.
+
 
 
 close_(_State, _Socket, Reason) ->
@@ -225,8 +266,15 @@ close_(_State, _Socket, Reason) ->
 %% RECEIVE & UNPACK & ANSWER
 recv_(State = #{buf := Buf, s := CurSocket}, {tcp, Socket, Packet}) when CurSocket == Socket ->
   {NewBuf, Answers} = parse_(<<Buf/binary, Packet/binary>>),
-  NewState = resp_(State, Answers),
-  {noreply, NewState#{buf := NewBuf}}.
+  NewState = #{refs := Refs} = resp_(State, Answers),
+  case Refs of
+    [{LastUntil,_,_,_,_}|_] -> 
+      Now = erlang:system_time(millisecond),
+      HolderTimeout = case LastUntil - Now of V when V >= 0 -> V; _ -> 0 end,
+      {noreply, NewState#{buf := NewBuf}, HolderTimeout};
+    [] ->
+      {noreply, NewState#{buf := NewBuf}}
+  end.
 
 
   
@@ -274,10 +322,10 @@ parse_(<<>>, AnswerAcc) -> {<<>>, AnswerAcc}.
 resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, #{16#30 := AnswerBody}]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
+    {value, {_Until, Seq, Ref, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
       Pid ! {taran_socket_answer, Ref, {ok, AnswerBody}},
       resp_(State#{refs := NewRefs}, Answers);
-    {value, {Ref, Seq, Pid, _ElseCode}, NewRefs} ->
+    {value, {_Until, Seq, Ref, Pid, _ElseCode}, NewRefs} ->
       Answer =
         case AnswerBody of
           [Value]   -> Value;
@@ -293,10 +341,10 @@ resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, #{16#30 := AnswerBody}]|Ans
 resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, _]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
+    {value, {_Until, Seq, Ref, Pid, Code}, NewRefs} when Code == ?REQUEST_CODE_SELECT ->
       Pid ! {taran_socket_answer, Ref, {ok, []}},
       resp_(State#{refs := NewRefs}, Answers);
-    {value, {Ref, Seq, Pid, _ElseCode}, NewRefs} ->
+    {value, {_Until, Seq, Ref, Pid, _ElseCode}, NewRefs} ->
       Pid ! {taran_socket_answer, Ref, ok},
       resp_(State#{refs := NewRefs}, Answers);
     false ->
@@ -307,7 +355,7 @@ resp_(State = #{refs := Refs}, [[Header = #{0 := 0}, _]|Answers]) ->
 resp_(State = #{refs := Refs}, [[Header = #{0 := ErrCode}, #{16#31 := AnswerBody}]|Answers]) ->
   #{?IPROTO_SYNC  := Seq} = Header,
   case lists:keytake(Seq, 2, Refs) of
-    {value, {Ref, Seq, Pid, _Code}, NewRefs} ->
+    {value, {_Until, Seq, Ref, Pid, _Code}, NewRefs} ->
        Pid ! {taran_socket_answer, Ref, {err, {ErrCode, AnswerBody}} },
        resp_(State#{refs := NewRefs}, Answers);
     false ->
