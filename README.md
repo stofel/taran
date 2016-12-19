@@ -69,5 +69,3 @@ ok
 
 See taran.erl for more commands, options and defaults.
 
-dev:
-Try to use one timer by connection
