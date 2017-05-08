@@ -31,7 +31,7 @@ Args = #{host => "127.0.0.1",   %% Host (default "localhost")
 taran:connect(_ConnName = test, Args).
 {ok,test}
 %% or
-taran:connect(_ConnName = test, #{port => 3311}) ->
+taran:connect(_ConnName = test, #{port => 3311}).
 {ok,test}
 
 
