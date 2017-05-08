@@ -1,7 +1,8 @@
 # taran
 
 
-Erlang tarantool 1.6.8 connector
+Erlang tarantool 1.6/1.7 connector.
+
 
 INSTALL
 
@@ -15,7 +16,9 @@ add it to your rebar config
 ]}.
 ```
 
-and add taran to your_project.app.src file
+and add taran to your_project.app.src file.
+
+For tarantool 1.6 call function  support delete {d, 'TARANTOOL_V17_CALL'} from taran/rebar.conf
 
 USAGE
 
