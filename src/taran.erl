@@ -29,7 +29,11 @@
 -define(REQUEST_CODE_REPLACE, 16#03).
 -define(REQUEST_CODE_UPDATE,  16#04).
 -define(REQUEST_CODE_DELETE,  16#05).
+-ifdef(TARANTOOL_V17_CALL).
+-define(REQUEST_CODE_CALL,    16#0a).
+-else.
 -define(REQUEST_CODE_CALL,    16#06).
+-endif.
 -define(REQUEST_CODE_EVAL,    16#08).
 -define(REQUEST_CODE_UPSERT,  16#09).
 
