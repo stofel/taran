@@ -3,6 +3,9 @@
 
 Erlang tarantool 1.6/1.7 connector.
 
+Use OTP based supervisor controlled pool asynchronus conections.
+Map <-> Lua tables support
+
 
 INSTALL
 
