@@ -42,7 +42,11 @@ taran:connect(_ConnName = test, Args).
 taran:connect(_ConnName = test, #{port => 3311}).
 {ok,test}
 
+taran:connect_list().
+[{test,<0.926.0>,supervisor,[taran_conns_sup]}]
 
+
+%% Insert
 taran:insert(Db, [1, <<"test_row">>]).
 {ok, [1, <<"test_row">>]}
 %% or
@@ -51,6 +55,7 @@ taran:insert(Db, [1, <<"test_row">>], Args).
 {ok, [1, <<"test_row">>]}
 
 
+%% Select
 taran:select(Db, [1]).
 {ok, [[1, <<"test_row">>]]}
 %% or
@@ -62,6 +67,26 @@ Args = #{space_id => 0,           %% SpaceId 0 by default
 taran:select(Db, [1], Args).
 {ok, [[1, <<"test_row">>]]}
  
+%% Update
+Op = [<<"=">>, 1, <<"test_row2">>]
+taran:update(Db, [1], [Op]).
+ok
+%% or
+Args = #{space_id => 0,           %% SpaceId 0 by default
+         index_id => 0},          %% IndexId 0 by default
+taran:update(Db, [1], [Op], Args).
+ok
+
+%% Upsert
+Tuple = {3, <<"test_row3">>},}
+Op = [<<"=">>, 1, <<"test_row3">>],
+taran:upsert(Db, Tuple, [Op]) 
+{ok, []}
+%% or
+Args = #{space_id => 0,           %% SpaceId 0 by default
+         index_id => 0},          %% IndexId 0 by default
+taran:upsert(Db, Tuple, [Op], Args)
+
 
 %% Other cmds
 
