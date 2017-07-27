@@ -70,12 +70,12 @@ taran:select(Db, [1], Args).
 %% Update
 Op = [<<"=">>, 1, <<"test_row2">>]
 taran:update(Db, [1], [Op]).
-ok
+{ok, []}
 %% or
 Args = #{space_id => 0,           %% SpaceId 0 by default
          index_id => 0},          %% IndexId 0 by default
 taran:update(Db, [1], [Op], Args).
-ok
+{ok, []}
 
 %% Upsert
 Tuple = {3, <<"test_row3">>},}
@@ -85,7 +85,8 @@ taran:upsert(Db, Tuple, [Op])
 %% or
 Args = #{space_id => 0,           %% SpaceId 0 by default
          index_id => 0},          %% IndexId 0 by default
-taran:upsert(Db, Tuple, [Op], Args)
+taran:upsert(Db, Tuple, [Op], Args).
+{ok, []}
 
 
 %% Other cmds
