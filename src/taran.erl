@@ -173,9 +173,9 @@ send(Conn, Code, Body) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% SELECT
-%% Args = proplist with [space_id, index_id, limit, offset, iterator] keys
+%% Args = map with [space_id, index_id, limit, offset, iterator] fields
 %% example:
-%%  select(test_conn, [1], [{limit, 5}]).
+%%  select(test_conn, [1], [#{limit => 5}]).
 select(Conn) -> 
   select(Conn, []).
 select(Conn, Key) ->
