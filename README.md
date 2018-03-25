@@ -78,7 +78,7 @@ taran:update(Db, [1], [Op], Args).
 {ok, []}
 
 %% Upsert
-Tuple = {3, <<"test_row3">>},}
+Tuple = {3, <<"test_row3">>},
 Op = [<<"=">>, 1, <<"test_row3">>],
 taran:upsert(Db, Tuple, [Op]) 
 {ok, []}
@@ -88,6 +88,15 @@ Args = #{space_id => 0,           %% SpaceId 0 by default
 taran:upsert(Db, Tuple, [Op], Args).
 {ok, []}
 
+%% Delete
+Key = 1,
+taran:delete(Db, [Key])
+{ok, []}
+%% or
+Args = #{space_id => 0,           %% SpaceId 0 by default
+         index_id => 0},          %% IndexId 0 by default
+taran:delete(Db, [Key], Args)
+{ok, []}
 
 %% Other cmds
 
