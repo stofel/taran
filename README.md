@@ -4,7 +4,7 @@
 Erlang tarantool 1.6/1.7 connector.
 
 DESCRIPTION
-1. Pools asynchronus conections (OTP supervisor based)
+1. Pools asynchronus connections (OTP supervisor based)
 2. Auto reconnect
 3. Erlang maps <-> Lua tables support
 
