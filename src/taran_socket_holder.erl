@@ -61,27 +61,36 @@ init_(Args) ->
             ],
   ConnArgs = Args#{tcp_opts => TcpOpts},
   case connect(ConnArgs) of
-    {ok, Socket} -> {ok, ?S#{s => Socket, args := ConnArgs}};
-    Else -> Else
+    {ok, Socket}           -> {ok, ?S#{s => Socket, args := ConnArgs}};
+    {err, {timeout, Desc}} -> {stop, {shutdown, {timeout, Desc}}};
+    Else -> 
+      timer:sleep(1000), %% sleep for slowdown restarts
+      {stop, {shutdown, Else}} 
   end. 
 
  
 
-connect(_Args = #{host := Host, port := Port, user := User, pass := Pass, tcp_opts := TcpOpts}) ->
-  {ok, Socket} = gen_tcp:connect(Host, Port, TcpOpts),
-  receive 
-    {tcp, Socket, GreetingData} ->
-      case User == <<"none">> andalso Pass == <<"none">> of 
-        true -> 
-          {ok, Socket};
-        false ->
-          case auth(Socket, User, Pass, GreetingData) of
-            ok -> {ok, Socket};
-            Else -> Else
-          end
-      end
-  after
-    1000 -> throw(socket_timeout)
+connect(_Args = #{host := Host, port := Port, user := User, 
+                  pass := Pass, tcp_opts := TcpOpts, connect_timeout := ConnectTimeout}) ->
+  case gen_tcp:connect(Host, Port, TcpOpts, ConnectTimeout) of
+    {ok, Socket} ->
+      receive 
+        {tcp, Socket, GreetingData} ->
+          case User == <<"none">> andalso Pass == <<"none">> of 
+            true -> 
+              {ok, Socket};
+            false ->
+              case auth(Socket, User, Pass, GreetingData) of
+                ok -> {ok, Socket};
+                Else -> Else
+              end
+          end;
+        Else -> Else
+      after
+        1000 -> {err, {timeout, receive_tarantool_greeting_timeout}}
+      end;
+    {error, timeout} -> {err, {timeout, tarantool_socket_connect_timeout}};
+    Else -> Else
   end.
 
 
@@ -128,9 +137,10 @@ auth(Socket, Login, Password, Greeting) when is_binary(Login), is_binary(Passwor
           [_,#{0 := 0,1 := 0},#{}]    -> ok;
           [_,#{0 := _,1 := _}, Else]  -> {err, Else};
           _ -> {err, auth_err}
-        end
+        end;
+      Else -> Else
     after 
-      1000 -> {err, no_auth_response}
+      1000 -> {err, {timeout, no_auth_response}}
     end,
   %io:format("AuthRes: ~p~n", [AuthRes]),
   AuthRes;
@@ -199,11 +209,11 @@ req_(State = #{s := Socket, refs := Refs, seq := Seq}, Ref, Req, Pid, Timeout) -
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % process info messages, timeouts of soket signals and data received 
-info_(State, {tcp,         Socket, Response}) -> recv_(State,  {tcp, Socket, Response});
-info_(State, {tcp_closed,  Socket})           -> close_(State, Socket, socket_closed);
-info_(State, {tcp_error,   Socket, Reason})   -> close_(State, Socket, Reason);
-info_(State, timeout)                         -> timeout_(State);
-info_(State, _)                               -> info_unknown(State).
+info_(State, {tcp,        Socket, Response}) -> recv_(State,  {tcp, Socket, Response});
+info_(State, {tcp_closed, Socket})           -> {stop, {shutdown, tcp_closed}, State};
+info_(State, {tcp_error,  Socket, Reason})   -> {stop, {shutdown, {tcp_error, Reason}}, State};
+info_(State, timeout)                        -> timeout_(State);
+info_(State, _)                              -> info_unknown(State).
 
 
 timeout_(State) ->
@@ -252,12 +262,6 @@ call_unknown(State = #{refs := Refs}) ->
     [] ->
       {reply, {err, {call_error, unknown_msg}}, State}
   end.
-
-
-
-close_(_State, _Socket, Reason) ->
-  %exit(err),
-  throw({tcp_closed, Reason}).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
