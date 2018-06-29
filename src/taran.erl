@@ -95,7 +95,8 @@ connect(Name, Options) when is_atom(Name); Name == "unnamed" ->
     port => maps:get(port, Options, 3301),        %% TCP Port to connect
     cnum => maps:get(cnum, Options, 3),           %% Number of sockets for this connect
     user => maps:get(user, Options, <<"none">>),  %% Auth user
-    pass => maps:get(pass, Options, <<"none">>)   %% Auth pass
+    pass => maps:get(pass, Options, <<"none">>),  %% Auth pass
+    connect_timeout => maps:get(connect_timeout, Options, 3000) %% Socket connect timeout ms
   },
 
 
